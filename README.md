@@ -1,2 +1,4 @@
-# Route Mapper
-Just a little program I needed for work. Reads Spring's route mapping annotations in a project and writes down all about them.
+# Route Compass
+An annotation processor that reads Spring Web's annotations to write down a map of all the routes in your projects: their paths, parameters, methods...
+
+It's a small program I found myself needing at work. Don't count on it being production-ready.

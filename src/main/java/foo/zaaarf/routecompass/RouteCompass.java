@@ -21,21 +21,42 @@ import java.util.*;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
+/**
+ * The main processor class.
+ */
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class RouteCompass extends AbstractProcessor {
 
-	private final HashMap<String, List<Route>> foundRoutes = new HashMap<>();
-	private final HashSet<Class<? extends Annotation>> annotationClasses = new HashSet<>();
+	/**
+	 * A {@link Map} tying each component class to the routes it contains.
+	 */
+	private final Map<String, List<Route>> foundRoutes = new HashMap<>();
 
+	/**
+	 * A {@link Set} containing all the supported annotation classes.
+	 */
+	private final Set<Class<? extends Annotation>> annotationClasses = new HashSet<>();
+
+	/**
+	 * Default constructor, it only initialises {@link #annotationClasses}.
+	 */
 	public RouteCompass() {
-		annotationClasses.add(RequestMapping.class);
-		annotationClasses.add(GetMapping.class);
-		annotationClasses.add(PostMapping.class);
-		annotationClasses.add(PutMapping.class);
-		annotationClasses.add(DeleteMapping.class);
-		annotationClasses.add(PatchMapping.class);
+		this.annotationClasses.add(RequestMapping.class);
+		this.annotationClasses.add(GetMapping.class);
+		this.annotationClasses.add(PostMapping.class);
+		this.annotationClasses.add(PutMapping.class);
+		this.annotationClasses.add(DeleteMapping.class);
+		this.annotationClasses.add(PatchMapping.class);
 	}
 
+	/**
+	 * Processes Spring's annotations, NOT claiming them for itself.
+	 * It builds a {@link Route} object for each route and adds it to {@link #foundRoutes},
+	 * then proceeds to print it to a file.
+	 * @param annotations the annotation types requested to be processed
+	 * @param env environment for information about the current and prior round
+	 * @return false, letting other processor process the annotations again
+	 */
 	@Override
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment env) {
 		for(TypeElement annotationType : annotations) {
@@ -70,7 +91,7 @@ public class RouteCompass extends AbstractProcessor {
 				for(Route r : routesInClass) {
 					out.print("\t- ");
 					if(r.deprecated) out.print("[DEPRECATED] ");
-					out.print(r.method + " " + r.route);
+					out.print(r.method + " " + r.path);
 					if(r.consumes != null) out.print("(expects: " + r.consumes + ")");
 					if(r.produces != null) out.print("(returns: " + r.produces + ")");
 					out.println();
@@ -92,6 +113,12 @@ public class RouteCompass extends AbstractProcessor {
 		return false; //don't claim them, let spring do its job
 	}
 
+	/**
+	 * Extracts the route of an element.
+	 * @param annotationType the {@link TypeElement} with the annotation we are processing
+	 * @param element the {@link Element} currently being examined
+	 * @return the full route of the endpoint
+	 */
 	private String getFullRoute(TypeElement annotationType, Element element) {
 		try {
 			String route = this.getAnnotationFieldsValue(annotationType, element, "path", "value");
@@ -107,6 +134,27 @@ public class RouteCompass extends AbstractProcessor {
 		}
 	}
 
+	/**
+	 * Finds the request methods supported by the endpoint.
+	 * @param annotationType the {@link TypeElement} with the annotation we are processing
+	 * @param element the {@link Element} currently being examined
+	 * @return the {@link RequestMethod}s supported by the endpoint
+	 */
+	private RequestMethod[] getRequestMethods(TypeElement annotationType, Element element) {
+		RequestMethod[] methods = annotationType.getQualifiedName().contentEquals(RequestMapping.class.getName())
+			? element.getAnnotation(RequestMapping.class).method()
+			: annotationType.getAnnotation(RequestMapping.class).method();
+		return methods.length == 0
+			? this.getParentOrFallback(element, methods, this::getRequestMethods)
+			: methods;
+	}
+
+	/**
+	 * Finds the media type consumed by an endpoint.
+	 * @param annotationType the {@link TypeElement} with the annotation we are processing
+	 * @param element the {@link Element} currently being examined
+	 * @return the {@link MediaType} consumed by the endpoint
+	 */
 	private MediaType getConsumedType(TypeElement annotationType, Element element) {
 		try {
 			MediaType res = this.getAnnotationFieldsValue(annotationType, element, "consumes");
@@ -118,6 +166,12 @@ public class RouteCompass extends AbstractProcessor {
 		}
 	}
 
+	/**
+	 * Finds the media type consumed by an endpoint.
+	 * @param annotationType the {@link TypeElement} with the annotation we are processing
+	 * @param element the {@link Element} currently being examined
+	 * @return the {@link MediaType} consumed by the endpoint
+	 */
 	private MediaType getProducedType(TypeElement annotationType, Element element) {
 		try {
 			MediaType res = this.getAnnotationFieldsValue(annotationType, element, "produces");
@@ -129,20 +183,21 @@ public class RouteCompass extends AbstractProcessor {
 		}
 	}
 
-	private RequestMethod[] getRequestMethods(TypeElement annotationType, Element element) {
-		RequestMethod[] methods = annotationType.getQualifiedName().contentEquals(RequestMapping.class.getName())
-			? element.getAnnotation(RequestMapping.class).method()
-			: annotationType.getAnnotation(RequestMapping.class).method();
-		return methods.length == 0
-			? this.getParentOrFallback(element, methods, this::getRequestMethods)
-			: methods;
+	/**
+	 * Checks whether the endpoint or its parent are deprecated
+	 * @param element the {@link Element} currently being examined
+	 * @return whether the given endpoint is deprecated
+	 */
+	private boolean isDeprecated(Element element) {
+		return element.getAnnotation(Deprecated.class) != null
+			|| element.getEnclosingElement().getAnnotation(Deprecated.class) != null;
 	}
 
-	private boolean isDeprecated(Element elem) {
-		return elem.getAnnotation(Deprecated.class) != null
-			|| elem.getEnclosingElement().getAnnotation(Deprecated.class) != null;
-	}
-
+	/**
+	 * Gets the parameters accepted by a request.
+	 * @param params the {@link VariableElement}s representing the parameters of a request
+	 * @return an array of {@link Route.Param} representing the parameters of the request.
+	 */
 	private Route.Param[] getParams(List<? extends VariableElement> params) {
 		return params.stream()
 			.map(p -> {
@@ -165,6 +220,15 @@ public class RouteCompass extends AbstractProcessor {
 			}).filter(Objects::nonNull).toArray(Route.Param[]::new);
 	}
 
+	/**
+	 * An annotation value.
+	 * @param annotationType the {@link TypeElement} with the annotation we are processing
+	 * @param element the {@link Element} currently being examined
+	 * @param fieldNames the field name(s) to look for; they are tried in order, and the first found is returned
+	 * @return the field value, cast to the expected type
+	 * @param <T> the expected type of the field
+	 * @throws ReflectiveOperationException when given non-existing or inaccessible field names (hopefully never)
+	 */
 	@SuppressWarnings({"OptionalGetWithoutIsPresent", "unchecked"})
 	private <T> T getAnnotationFieldsValue(TypeElement annotationType, Element element, String ... fieldNames)
 		throws ReflectiveOperationException {
@@ -183,6 +247,15 @@ public class RouteCompass extends AbstractProcessor {
 		return result;
 	}
 
+	/**
+	 * Finds whether the parent of the given element has any supported annotation, then applies the given
+	 * function to both parent and found annotation.
+	 * @param element the {@link Element} currently being examined
+	 * @param fallback the value to return if the parent didn't have any supported annotations
+	 * @param fun the {@link BiFunction} to apply
+	 * @return the output or the function, or the fallback value if the parent didn't have any supported annotation
+	 * @param <T> the type of the expected result
+	 */
 	private <T> T getParentOrFallback(Element element, T fallback, BiFunction<TypeElement, Element, T> fun) {
 		List<Class<? extends Annotation>> found = this.annotationClasses.stream()
 			.filter(annClass -> element.getEnclosingElement().getAnnotation(annClass) != null)
@@ -194,7 +267,7 @@ public class RouteCompass extends AbstractProcessor {
 			Diagnostic.Kind.WARNING,
 			"Found multiple mapping annotations on "
 				+ element.getSimpleName().toString()
-				+ ", only one of the will be considered!"
+				+ ", only one of them will be considered!"
 		);
 
 		return fun.apply(
@@ -204,6 +277,9 @@ public class RouteCompass extends AbstractProcessor {
 		);
 	}
 
+	/**
+	 * @return the types of annotations supported by this processor
+	 */
 	@Override
 	public Set<String> getSupportedAnnotationTypes() {
 		return annotationClasses.stream().map(Class::getCanonicalName).collect(Collectors.toSet());
