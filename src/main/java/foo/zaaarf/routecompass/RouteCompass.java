@@ -1,5 +1,6 @@
 package foo.zaaarf.routecompass;
 
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -10,17 +11,19 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
+import javax.tools.FileObject;
+import javax.tools.StandardLocation;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 public class RouteCompass extends AbstractProcessor {
 
-	private final HashSet<Route> foundRoutes = new HashSet<>();
+	private final HashMap<String, List<Route>> foundRoutes = new HashMap<>();
 	private final HashSet<Class<? extends Annotation>> annotationClasses = new HashSet<>();
 
 	public RouteCompass() {
@@ -39,34 +42,49 @@ public class RouteCompass extends AbstractProcessor {
 				.stream()
 				.filter(elem -> elem instanceof ExecutableElement)
 				.map(elem -> (ExecutableElement) elem)
-				.forEach(elem -> this.foundRoutes.add(new Route(
-					elem.getEnclosingElement().asType().toString(),
-					this.getFullRoute(annotationType, elem),
-					this.getRequestMethods(annotationType, elem),
-					this.isDeprecated(elem)
-				)));
+				.forEach(elem -> {
+					String classFQN = elem.getEnclosingElement().asType().toString();
+					List<Route> routesInClass = foundRoutes.computeIfAbsent(classFQN, k -> new ArrayList<>());
+					routesInClass.add(new Route(
+						this.getFullRoute(annotationType, elem),
+						this.getRequestMethods(annotationType, elem),
+						this.getConsumedType(annotationType, elem),
+						this.getProducedType(annotationType, elem),
+						this.isDeprecated(elem)
+					));
+				});
 		}
 
-		//TODO print
+		try { //TODO: support param printing
+			FileObject serviceProvider = this.processingEnv.getFiler().createResource(
+				StandardLocation.SOURCE_OUTPUT, "", "routes"
+			);
+
+			PrintWriter out = new PrintWriter(serviceProvider.openWriter());
+			for(String componentClass : this.foundRoutes.keySet()) {
+				out.println(componentClass + ":");
+
+				List<Route> routesInClass = this.foundRoutes.get(componentClass);
+				for(Route r : routesInClass) {
+					out.print("\t- " + r.method + r.route);
+					if(r.consumes != null) out.print("(expects: " + r.consumes + ")");
+					if(r.produces != null) out.print("(returns: " + r.produces + ")");
+					out.println();
+				}
+			}
+
+			out.close();
+		} catch(IOException e) {
+			throw new RuntimeException(e);
+		}
 
 		return false; //don't claim them, let spring do its job
 	}
 
 	private String getFullRoute(TypeElement annotationType, Element element) {
-		@SuppressWarnings("OptionalGetWithoutIsPresent") //find matching annotation class
-		Class<? extends Annotation> annClass = this.annotationClasses.stream()
-			.filter(c -> annotationType.getQualifiedName().contentEquals(c.getName()))
-			.findFirst()
-			.get(); //should never fail
-
 		try {
-			//it can be both path and value
-			String pathValue = (String) annClass.getField("path").get(element.getAnnotation(annClass));
-			String route = pathValue == null
-				? (String) annClass.getField("value").get(element.getAnnotation(annClass))
-				: pathValue;
-
-			return this.parentOrFallback(element, route, (a, e) -> {
+			String route = this.getAnnotationFieldsValue(annotationType, element, "path", "value");
+			return this.getParentOrFallback(element, route, (a, e) -> {
 				String parent = this.getFullRoute(a, e);
 				StringBuilder sb = new StringBuilder(parent);
 				if(!parent.endsWith("/")) sb.append("/");
@@ -78,12 +96,34 @@ public class RouteCompass extends AbstractProcessor {
 		}
 	}
 
+	private MediaType getConsumedType(TypeElement annotationType, Element element) {
+		try {
+			MediaType res = this.getAnnotationFieldsValue(annotationType, element, "consumes");
+			return res == null
+				? this.getParentOrFallback(element, res, this::getConsumedType)
+				: res;
+		} catch(ReflectiveOperationException ex) {
+			throw new RuntimeException(ex);
+		}
+	}
+
+	private MediaType getProducedType(TypeElement annotationType, Element element) {
+		try {
+			MediaType res = this.getAnnotationFieldsValue(annotationType, element, "produces");
+			return res == null
+				? this.getParentOrFallback(element, res, this::getProducedType)
+				: res;
+		} catch(ReflectiveOperationException ex) {
+			throw new RuntimeException(ex);
+		}
+	}
+
 	private RequestMethod[] getRequestMethods(TypeElement annotationType, Element element) {
 		RequestMethod[] methods = annotationType.getQualifiedName().contentEquals(RequestMapping.class.getName())
 			? element.getAnnotation(RequestMapping.class).method()
 			: annotationType.getAnnotation(RequestMapping.class).method();
 		return methods.length == 0
-			? this.parentOrFallback(element, methods, this::getRequestMethods)
+			? this.getParentOrFallback(element, methods, this::getRequestMethods)
 			: methods;
 	}
 
@@ -92,7 +132,25 @@ public class RouteCompass extends AbstractProcessor {
 			|| elem.getEnclosingElement().getAnnotation(Deprecated.class) != null;
 	}
 
-	private <T> T parentOrFallback(Element element, T fallback, BiFunction<TypeElement, Element, T> fun) {
+	@SuppressWarnings({"OptionalGetWithoutIsPresent", "unchecked"})
+	private <T> T getAnnotationFieldsValue(TypeElement annotationType, Element element, String ... fieldNames)
+		throws ReflectiveOperationException {
+
+		Class<? extends Annotation> annClass = this.annotationClasses.stream()
+			.filter(c -> annotationType.getQualifiedName().contentEquals(c.getName()))
+			.findFirst()
+			.get(); //should never fail
+
+		T result = null;
+		for(String fieldName : fieldNames) {
+			result = (T) annClass.getField(fieldName).get(element.getAnnotation(annClass));
+			if(result != null) return result;
+		}
+
+		return result;
+	}
+
+	private <T> T getParentOrFallback(Element element, T fallback, BiFunction<TypeElement, Element, T> fun) {
 		List<Class<? extends Annotation>> found = this.annotationClasses.stream()
 			.filter(annClass -> element.getEnclosingElement().getAnnotation(annClass) != null)
 			.collect(Collectors.toList());
