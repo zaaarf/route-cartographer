@@ -10,6 +10,7 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
@@ -50,12 +51,13 @@ public class RouteCompass extends AbstractProcessor {
 						this.getRequestMethods(annotationType, elem),
 						this.getConsumedType(annotationType, elem),
 						this.getProducedType(annotationType, elem),
-						this.isDeprecated(elem)
+						this.isDeprecated(elem),
+						this.getParams(elem.getParameters())
 					));
 				});
 		}
 
-		try { //TODO: support param printing
+		try {
 			FileObject serviceProvider = this.processingEnv.getFiler().createResource(
 				StandardLocation.SOURCE_OUTPUT, "", "routes"
 			);
@@ -66,10 +68,19 @@ public class RouteCompass extends AbstractProcessor {
 
 				List<Route> routesInClass = this.foundRoutes.get(componentClass);
 				for(Route r : routesInClass) {
-					out.print("\t- " + r.method + r.route);
+					out.print("\t- ");
+					if(r.deprecated) out.print("[DEPRECATED] ");
+					out.print(r.method + " " + r.route);
 					if(r.consumes != null) out.print("(expects: " + r.consumes + ")");
 					if(r.produces != null) out.print("(returns: " + r.produces + ")");
 					out.println();
+
+					for(Route.Param p : r.params) {
+						out.print("\t\t- " + p.typeFQN + " " + p.name);
+						if(p.defaultValue != null)
+							out.print(" " + "(default: " + p.defaultValue + ")");
+						out.println();
+					}
 				}
 			}
 
@@ -130,6 +141,28 @@ public class RouteCompass extends AbstractProcessor {
 	private boolean isDeprecated(Element elem) {
 		return elem.getAnnotation(Deprecated.class) != null
 			|| elem.getEnclosingElement().getAnnotation(Deprecated.class) != null;
+	}
+
+	private Route.Param[] getParams(List<? extends VariableElement> params) {
+		return params.stream()
+			.map(p -> {
+				RequestParam ann = p.getAnnotation(RequestParam.class);
+				if(ann == null) return null;
+
+				String name = ann.name(); //first try annotation.name()
+				name = name.isEmpty()
+					? ann.value() //then annotation.value()
+					: name;
+				name = name.isEmpty()
+					? p.getSimpleName().toString() //fall back on parameter name
+					: name;
+
+				String defaultValue = ann.defaultValue();
+				if(defaultValue.equals(ValueConstants.DEFAULT_NONE))
+					defaultValue = null;
+
+				return new Route.Param(name, defaultValue, p.asType().toString());
+			}).filter(Objects::nonNull).toArray(Route.Param[]::new);
 	}
 
 	@SuppressWarnings({"OptionalGetWithoutIsPresent", "unchecked"})
