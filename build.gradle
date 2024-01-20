@@ -1,14 +1,28 @@
 plugins {
-    id 'java'
+	id 'java'
+	id 'com.palantir.git-version' version '0.13.0'
 }
 
 group = 'foo.zaaarf'
-version = '0.1'
+archivesBaseName = 'rc'
+version = gitVersion().split('-').getAt(0).replace('.dirty', '')
+
+java {
+	sourceCompatibility = targetCompatibility = JavaVersion.VERSION_1_8
+	withSourcesJar()
+	withJavadocJar()
+}
+
+javadoc {
+	options {
+		links 'https://docs.spring.io/spring-framework/docs/5.3.31/javadoc-api/'
+	}
+}
 
 repositories {
-    mavenCentral()
+	mavenCentral()
 }
 
 dependencies {
-    implementation 'org.springframework:spring-web:5.3.31'
+	implementation 'org.springframework:spring-web:5.3.31'
 }
