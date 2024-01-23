@@ -1,15 +1,14 @@
 package foo.zaaarf.routecompass;
 
+import org.springframework.http.RequestEntity;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
@@ -267,8 +266,30 @@ public class RouteCompass extends AbstractProcessor {
 		if(!(type instanceof TypeElement)) //doubles as null check
 			return null;
 
-		List<VariableElement> fieldElements = new ArrayList<>();
 		TypeElement typeElement = (TypeElement) type;
+
+		//parameter checks
+		Name base = typeElement.getQualifiedName();
+		if(base.contentEquals(ResponseEntity.class.getCanonicalName())
+			|| base.contentEquals(RequestEntity.class.getCanonicalName())) {
+			typeElement = (TypeElement) typeElement.getTypeParameters()
+				.stream()
+				.findFirst()
+				.map(TypeParameterElement::getBounds)
+				.map(l -> {
+					List<TypeMirror> lst = new ArrayList<>(l); //mutable
+					lst.removeIf(b -> b.toString().equals("java.lang.Object"));
+					return lst;
+				}).flatMap(l -> l.stream().findFirst())
+				.map(m -> this.processingEnv.getTypeUtils().asElement(m))
+				.filter(m -> m instanceof TypeElement)
+				.orElse(null );
+
+			if(typeElement == null)
+				return new Route.DTO(base.toString());
+		}
+
+		List<VariableElement> fieldElements = new ArrayList<>();
 		do {
 			fieldElements.addAll(typeElement
 				.getEnclosedElements()
@@ -302,7 +323,7 @@ public class RouteCompass extends AbstractProcessor {
 		throws ReflectiveOperationException {
 
 		Class<? extends Annotation> annClass = this.annotationClasses.stream()
-			.filter(c -> annotationType.getQualifiedName().contentEquals(c.getName()))
+			.filter(c -> annotationType.getQualifiedName().contentEquals(c.getCanonicalName()))
 			.findFirst()
 			.get(); //should never fail
 
@@ -340,9 +361,8 @@ public class RouteCompass extends AbstractProcessor {
 		);
 
 		return fun.apply(
-			this.processingEnv.getElementUtils()
-				.getTypeElement(found.get(0).getName()),
-			element
+			this.processingEnv.getElementUtils().getTypeElement(found.get(0).getCanonicalName()),
+			element.getEnclosingElement()
 		);
 	}
 
