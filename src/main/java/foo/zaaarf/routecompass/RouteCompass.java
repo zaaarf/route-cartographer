@@ -87,7 +87,7 @@ public class RouteCompass extends AbstractProcessor {
 
 		try {
 			FileObject serviceProvider = this.processingEnv.getFiler().createResource(
-				StandardLocation.SOURCE_OUTPUT, "", "routes"
+				StandardLocation.SOURCE_OUTPUT, "", "route_map"
 			);
 
 			PrintWriter out = new PrintWriter(serviceProvider.openWriter());
@@ -98,11 +98,12 @@ public class RouteCompass extends AbstractProcessor {
 				for(Route r : routesInClass) {
 					out.print("\t- ");
 					if(r.deprecated) out.print("[DEPRECATED] ");
-					out.print(r.method + " " + r.path);
+					out.print("[" + String.join("|", r.methods) + "] ["
+						+ String.join("|", r.paths) + "]");
 					if(r.consumes != null && r.consumes.length > 0)
-						out.print("(expects: " + Arrays.toString(r.consumes) + ")");
+						out.print(" (expects: " + String.join("|", r.consumes) + ")");
 					if(r.produces != null && r.produces.length > 0)
-						out.print("(returns: " + Arrays.toString(r.produces) + ")");
+						out.print(" (returns: " + String.join("|", r.produces) + ")");
 					out.println();
 
 					BiConsumer<String, Route.Param[]> printParam = (name, params) -> {
@@ -111,7 +112,7 @@ public class RouteCompass extends AbstractProcessor {
 							out.print(name != null ? "\t\t\t" : "\t\t");
 							out.print("- " + p.typeFQN + " " + p.name);
 							if(p.defaultValue != null)
-								out.print(" " + "(default: " + p.defaultValue + ")");
+								out.print(" (default: " + p.defaultValue + ")");
 							out.println();
 						}
 					};
@@ -140,19 +141,23 @@ public class RouteCompass extends AbstractProcessor {
 	 * @param element the {@link Element} currently being examined
 	 * @return the full route of the endpoint
 	 */
-	private String getFullRoute(TypeElement annotationType, Element element) {
-		try { //TODO support multiple routes
+	private String[] getFullRoute(TypeElement annotationType, Element element) {
+		try {
 			String[] routes = this.getAnnotationFieldsValue(
 				annotationType,
 				element,
 				(arr) -> Arrays.deepEquals(arr, new String[] {}),
 				"path", "value");
-			return this.getParentOrFallback(element, routes[0], (a, e) -> {
-				String parent = this.getFullRoute(a, e);
-				StringBuilder sb = new StringBuilder(parent);
-				if(!parent.endsWith("/")) sb.append("/");
-				sb.append(routes[0]);
-				return sb.toString();
+			return this.getParentOrFallback(element, routes, (a, e) -> {
+				//assume parent doesn't have multiple routes
+				String parent = this.getFullRoute(a, e)[0];
+				for(int i = 0; i < routes.length; i++) {
+					StringBuilder sb = new StringBuilder(parent);
+					if(!parent.endsWith("/")) sb.append("/");
+					sb.append(routes[i]);
+					routes[i] = sb.toString();
+				}
+				return routes;
 			});
 		} catch (ReflectiveOperationException ex) {
 			throw new RuntimeException(ex); //if it fails something went very wrong
@@ -249,7 +254,7 @@ public class RouteCompass extends AbstractProcessor {
 				if(defaultValue.equals(ValueConstants.DEFAULT_NONE))
 					defaultValue = null;
 
-				return new Route.Param(name, defaultValue, p.asType().toString());
+				return new Route.Param(name, p.asType().toString(), defaultValue);
 			}).filter(Objects::nonNull).toArray(Route.Param[]::new);
 	}
 
@@ -276,7 +281,7 @@ public class RouteCompass extends AbstractProcessor {
 			else typeElement = null;
 		} while(typeElement != null);
 
-		return new Route.DTO(type.asType().toString(), fieldElements.stream() //TODO @JsonIgnore
+		return new Route.DTO(type.asType().toString(), fieldElements.stream()
 			.map(e -> new Route.Param(e.asType().toString(), e.getSimpleName().toString(), null))
 			.toArray(Route.Param[]::new));
 	}

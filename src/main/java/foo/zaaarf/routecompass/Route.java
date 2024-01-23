@@ -2,19 +2,21 @@ package foo.zaaarf.routecompass;
 
 import org.springframework.web.bind.annotation.RequestMethod;
 
+import java.util.Arrays;
+
 /**
  * Representation of a REST route.
  */
 public class Route {
 	/**
-	 * The path of the endpoint.
+	 * The paths of the endpoint.
 	 */
-	public final String path;
+	public final String[] paths;
 
 	/**
-	 * The supported {@link RequestMethod}s, flattened to a string.
+	 * The supported {@link RequestMethod}s, as strings.
 	 */
-	public final String method;
+	public final String[] methods;
 
 	/**
 	 * The media types produced by the endpoint.
@@ -50,7 +52,7 @@ public class Route {
 
 	/**
 	 * The one and only constructor.
-	 * @param path the path of the endpoint
+	 * @param paths the paths of the endpoint
 	 * @param methods the {@link RequestMethod}s accepted by the endpoint
 	 * @param consumes the media types consumed by the endpoint, may be null
 	 * @param produces the media types produced by the endpoint, may be null
@@ -59,19 +61,10 @@ public class Route {
 	 * @param inputType the DTO for the request type, may be null
 	 * @param params {@link Param}s of the endpoint, may be null
 	 */
-	public Route(String path, RequestMethod[] methods, String[] consumes, String[] produces,
+	public Route(String[] paths, RequestMethod[] methods, String[] consumes, String[] produces,
 	             boolean deprecated, DTO returnType, DTO inputType, Param... params) {
-		this.path = path;
-
-		StringBuilder methodStringBuilder = new StringBuilder("[");
-		for(RequestMethod m : methods)
-			methodStringBuilder
-				.append(m.name())
-				.append("|");
-		methodStringBuilder
-			.deleteCharAt(methodStringBuilder.length() - 1)
-			.append("]");
-		this.method = methodStringBuilder.toString();
+		this.paths = paths;
+		this.methods = Arrays.stream(methods).map(Enum::name).toArray(String[]::new);
 
 		if(produces != null) this.produces = produces;
 		else this.produces = new String[0];
