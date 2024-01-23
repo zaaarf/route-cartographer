@@ -288,7 +288,7 @@ public class RouteCompass extends AbstractProcessor {
 
 		T result = null;
 		for(String fieldName : fieldNames) {
-			result = (T) annClass.getField(fieldName).get(element.getAnnotation(annClass));
+			result = (T) annClass.getMethod(fieldName).invoke(element.getAnnotation(annClass));
 			if(result != null) return result;
 		}
 

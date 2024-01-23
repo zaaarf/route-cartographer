@@ -56,6 +56,8 @@ public class Route {
 	 * @param consumes the {@link MediaType} consumed by the endpoint, may be null
 	 * @param produces the {@link MediaType} produced by the endpoint, may be null
 	 * @param deprecated whether the endpoint is deprecated
+	 * @param returnType the DTO for the response type, may be null
+	 * @param inputType the DTO for the request type, may be null
 	 * @param params {@link Param}s of the endpoint, may be null
 	 */
 	public Route(String path, RequestMethod[] methods, MediaType consumes, MediaType produces,
