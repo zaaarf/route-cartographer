@@ -61,7 +61,6 @@ public class RouteCompass extends AbstractProcessor {
 	 * @return false, letting other processor process the annotations again
 	 */
 	@Override
-	@SuppressWarnings("OptionalGetWithoutIsPresent")
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment env) {
 		for(TypeElement annotationType : annotations) {
 			env.getElementsAnnotatedWith(annotationType)
@@ -80,7 +79,7 @@ public class RouteCompass extends AbstractProcessor {
 						this.getDTO(this.processingEnv.getTypeUtils().asElement(elem.getReturnType())),
 						this.getDTO(elem.getParameters().stream()
 							.filter(e -> e.getAnnotation(RequestBody.class) != null)
-							.findFirst().get()),
+							.findFirst().orElse(null)),
 						this.getQueryParams(elem.getParameters())
 					));
 				});
@@ -100,10 +99,10 @@ public class RouteCompass extends AbstractProcessor {
 					out.print("\t- ");
 					if(r.deprecated) out.print("[DEPRECATED] ");
 					out.print(r.method + " " + r.path);
-					if(r.consumes != null) {
+					if(r.consumes != null && r.consumes.length > 0)
 						out.print("(expects: " + Arrays.toString(r.consumes) + ")");
-					}
-					if(r.produces != null) out.print("(returns: " + Arrays.toString(r.produces) + ")");
+					if(r.produces != null && r.produces.length > 0)
+						out.print("(returns: " + Arrays.toString(r.produces) + ")");
 					out.println();
 
 					BiConsumer<String, Route.Param[]> printParam = (name, params) -> {
