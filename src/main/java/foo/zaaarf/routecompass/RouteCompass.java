@@ -21,6 +21,7 @@ import java.lang.annotation.Annotation;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -142,7 +143,11 @@ public class RouteCompass extends AbstractProcessor {
 	 */
 	private String getFullRoute(TypeElement annotationType, Element element) {
 		try { //TODO support multiple routes
-			String[] routes = this.getAnnotationFieldsValue(annotationType, element, "path", "value");
+			String[] routes = this.getAnnotationFieldsValue(
+				annotationType,
+				element,
+				(arr) -> Arrays.deepEquals(arr, new String[] {}),
+				"path", "value");
 			return this.getParentOrFallback(element, routes[0], (a, e) -> {
 				String parent = this.getFullRoute(a, e);
 				StringBuilder sb = new StringBuilder(parent);
@@ -178,7 +183,11 @@ public class RouteCompass extends AbstractProcessor {
 	 */
 	private String[] getConsumedType(TypeElement annotationType, Element element) {
 		try {
-			String[] res = this.getAnnotationFieldsValue(annotationType, element, "consumes");
+			String[] res = this.getAnnotationFieldsValue(
+				annotationType,
+				element,
+				(arr) -> Arrays.deepEquals(arr, new String[] {}),
+				"consumes");
 			return res == null
 				? this.getParentOrFallback(element, res, this::getConsumedType)
 				: res;
@@ -195,7 +204,11 @@ public class RouteCompass extends AbstractProcessor {
 	 */
 	private String[] getProducedType(TypeElement annotationType, Element element) {
 		try {
-			String[] res = this.getAnnotationFieldsValue(annotationType, element, "produces");
+			String[] res = this.getAnnotationFieldsValue(
+				annotationType,
+				element,
+				(arr) -> Arrays.deepEquals(arr, new String[] {}),
+				"produces");
 			return res == null
 				? this.getParentOrFallback(element, res, this::getProducedType)
 				: res;
@@ -273,13 +286,15 @@ public class RouteCompass extends AbstractProcessor {
 	 * An annotation value.
 	 * @param annotationType the {@link TypeElement} with the annotation we are processing
 	 * @param element the {@link Element} currently being examined
+	 * @param unsetPredicate lambda that returns true if the value is the default one (thus unset)
 	 * @param fieldNames the field name(s) to look for; they are tried in order, and the first found is returned
 	 * @return the field value, cast to the expected type
 	 * @param <T> the expected type of the field
 	 * @throws ReflectiveOperationException when given non-existing or inaccessible field names (hopefully never)
 	 */
 	@SuppressWarnings({"OptionalGetWithoutIsPresent", "unchecked"})
-	private <T> T getAnnotationFieldsValue(TypeElement annotationType, Element element, String ... fieldNames)
+	private <T> T getAnnotationFieldsValue(TypeElement annotationType, Element element,
+	                                       Predicate<T> unsetPredicate, String ... fieldNames)
 		throws ReflectiveOperationException {
 
 		Class<? extends Annotation> annClass = this.annotationClasses.stream()
@@ -290,7 +305,8 @@ public class RouteCompass extends AbstractProcessor {
 		T result = null;
 		for(String fieldName : fieldNames) {
 			result = (T) annClass.getMethod(fieldName).invoke(element.getAnnotation(annClass));
-			if(result != null) return result;
+			if(result != null && !unsetPredicate.test(result))
+				return result;
 		}
 
 		return result;
