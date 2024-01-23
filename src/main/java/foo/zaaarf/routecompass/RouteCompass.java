@@ -11,6 +11,8 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
@@ -18,6 +20,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.util.*;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
@@ -58,6 +61,7 @@ public class RouteCompass extends AbstractProcessor {
 	 * @return false, letting other processor process the annotations again
 	 */
 	@Override
+	@SuppressWarnings("OptionalGetWithoutIsPresent")
 	public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment env) {
 		for(TypeElement annotationType : annotations) {
 			env.getElementsAnnotatedWith(annotationType)
@@ -73,7 +77,11 @@ public class RouteCompass extends AbstractProcessor {
 						this.getConsumedType(annotationType, elem),
 						this.getProducedType(annotationType, elem),
 						this.isDeprecated(elem),
-						this.getParams(elem.getParameters())
+						this.getDTO(this.processingEnv.getTypeUtils().asElement(elem.getReturnType())),
+						this.getDTO(elem.getParameters().stream()
+							.filter(e -> e.getAnnotation(RequestBody.class) != null)
+							.findFirst().get()),
+						this.getQueryParams(elem.getParameters())
 					));
 				});
 		}
@@ -96,12 +104,24 @@ public class RouteCompass extends AbstractProcessor {
 					if(r.produces != null) out.print("(returns: " + r.produces + ")");
 					out.println();
 
-					for(Route.Param p : r.params) {
-						out.print("\t\t- " + p.typeFQN + " " + p.name);
-						if(p.defaultValue != null)
-							out.print(" " + "(default: " + p.defaultValue + ")");
-						out.println();
-					}
+					BiConsumer<String, Route.Param[]> printParam = (name, params) -> {
+						if(name != null) out.println("\t\t" + name);
+						for(Route.Param p : params) {
+							out.print(name != null ? "\t\t\t" : "\t\t");
+							out.print("- " + p.typeFQN + " " + p.name);
+							if(p.defaultValue != null)
+								out.print(" " + "(default: " + p.defaultValue + ")");
+							out.println();
+						}
+					};
+
+					printParam.accept(null, r.params);
+
+					if(r.inputType != null)
+						printParam.accept("input: " + r.inputType.FQN, r.inputType.fields);
+
+					if(r.returnType != null)
+						printParam.accept("output: " + r.returnType.FQN, r.returnType.fields);
 				}
 			}
 
@@ -198,7 +218,7 @@ public class RouteCompass extends AbstractProcessor {
 	 * @param params the {@link VariableElement}s representing the parameters of a request
 	 * @return an array of {@link Route.Param} representing the parameters of the request.
 	 */
-	private Route.Param[] getParams(List<? extends VariableElement> params) {
+	private Route.Param[] getQueryParams(List<? extends VariableElement> params) {
 		return params.stream()
 			.map(p -> {
 				RequestParam ann = p.getAnnotation(RequestParam.class);
@@ -218,6 +238,34 @@ public class RouteCompass extends AbstractProcessor {
 
 				return new Route.Param(name, defaultValue, p.asType().toString());
 			}).filter(Objects::nonNull).toArray(Route.Param[]::new);
+	}
+
+	/**
+	 * Gets a representation of a DTO type.
+	 * @param type the {@link TypeElement} to examine
+	 * @return a {@link Route.DTO} representing the given type
+	 */
+	private Route.DTO getDTO(Element type) {
+		if(!(type instanceof TypeElement)) //doubles as null check
+			return null;
+
+		List<VariableElement> fieldElements = new ArrayList<>();
+		TypeElement typeElement = (TypeElement) type;
+		do {
+			fieldElements.addAll(typeElement
+				.getEnclosedElements()
+				.stream().filter(e -> e instanceof VariableElement)
+				.map(e -> (VariableElement) e)
+				.collect(Collectors.toList()));
+			TypeMirror superclass = typeElement.getSuperclass();
+			if(superclass.getKind() == TypeKind.DECLARED)
+				typeElement = (TypeElement) this.processingEnv.getTypeUtils().asElement(superclass);
+			else typeElement = null;
+		} while(typeElement != null);
+
+		return new Route.DTO(type.asType().toString(), fieldElements.stream() //TODO @JsonIgnore
+			.map(e -> new Route.Param(e.asType().toString(), e.getSimpleName().toString(), null))
+			.toArray(Route.Param[]::new));
 	}
 
 	/**

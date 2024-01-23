@@ -35,6 +35,16 @@ public class Route {
 	public final boolean deprecated;
 
 	/**
+	 * A {@link DTO} representing the response body.
+	 */
+	public final DTO returnType;
+
+	/**
+	 * A {@link DTO} representing the request body.
+	 */
+	public final DTO inputType;
+
+	/**
 	 * An array of {@link Param}s, representing parameters accepted by the endpoint.
 	 */
 	public final Param[] params;
@@ -48,8 +58,8 @@ public class Route {
 	 * @param deprecated whether the endpoint is deprecated
 	 * @param params {@link Param}s of the endpoint, may be null
 	 */
-	public Route(String path, RequestMethod[] methods, MediaType consumes, MediaType produces, boolean deprecated,
-	             Param... params) {
+	public Route(String path, RequestMethod[] methods, MediaType consumes, MediaType produces,
+	             boolean deprecated, DTO returnType, DTO inputType, Param... params) {
 		this.path = path;
 
 		StringBuilder methodStringBuilder = new StringBuilder("[");
@@ -69,6 +79,9 @@ public class Route {
 		else this.consumes = null;
 
 		this.deprecated = deprecated;
+
+		this.returnType = returnType;
+		this.inputType = inputType;
 
 		if(params != null) this.params = params;
 		else this.params = new Param[0]; //just in case
@@ -104,6 +117,33 @@ public class Route {
 			this.typeFQN = typeFQN;
 			this.name = name;
 			this.defaultValue = defaultValue;
+		}
+	}
+
+	/**
+	 * Representation of a DTO type.
+	 */
+	public static class DTO {
+
+		/**
+		 * Fully-qualified name of the type.
+		 */
+		public final String FQN;
+
+		/**
+		 * An array of {@link Param} representing the type's fields.
+		 */
+		public final Route.Param[] fields;
+
+		/**
+		 * The one and only constructor.
+		 * @param FQN the fully-qualified name
+		 * @param fields the {@link Param}s representing the fields
+		 */
+		public DTO(String FQN, Route.Param ... fields) {
+			this.FQN = FQN;
+			if(fields == null) this.fields = new Route.Param[0];
+			else this.fields = fields;
 		}
 	}
 }
