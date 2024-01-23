@@ -1,6 +1,5 @@
 package foo.zaaarf.routecompass;
 
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -100,8 +99,10 @@ public class RouteCompass extends AbstractProcessor {
 					out.print("\t- ");
 					if(r.deprecated) out.print("[DEPRECATED] ");
 					out.print(r.method + " " + r.path);
-					if(r.consumes != null) out.print("(expects: " + r.consumes + ")");
-					if(r.produces != null) out.print("(returns: " + r.produces + ")");
+					if(r.consumes != null) {
+						out.print("(expects: " + Arrays.toString(r.consumes) + ")");
+					}
+					if(r.produces != null) out.print("(returns: " + Arrays.toString(r.produces) + ")");
 					out.println();
 
 					BiConsumer<String, Route.Param[]> printParam = (name, params) -> {
@@ -140,13 +141,13 @@ public class RouteCompass extends AbstractProcessor {
 	 * @return the full route of the endpoint
 	 */
 	private String getFullRoute(TypeElement annotationType, Element element) {
-		try {
-			String route = this.getAnnotationFieldsValue(annotationType, element, "path", "value");
-			return this.getParentOrFallback(element, route, (a, e) -> {
+		try { //TODO support multiple routes
+			String[] routes = this.getAnnotationFieldsValue(annotationType, element, "path", "value");
+			return this.getParentOrFallback(element, routes[0], (a, e) -> {
 				String parent = this.getFullRoute(a, e);
 				StringBuilder sb = new StringBuilder(parent);
 				if(!parent.endsWith("/")) sb.append("/");
-				sb.append(route);
+				sb.append(routes[0]);
 				return sb.toString();
 			});
 		} catch (ReflectiveOperationException ex) {
@@ -173,11 +174,11 @@ public class RouteCompass extends AbstractProcessor {
 	 * Finds the media type consumed by an endpoint.
 	 * @param annotationType the {@link TypeElement} with the annotation we are processing
 	 * @param element the {@link Element} currently being examined
-	 * @return the {@link MediaType} consumed by the endpoint
+	 * @return the media type consumed by the endpoint
 	 */
-	private MediaType getConsumedType(TypeElement annotationType, Element element) {
+	private String[] getConsumedType(TypeElement annotationType, Element element) {
 		try {
-			MediaType res = this.getAnnotationFieldsValue(annotationType, element, "consumes");
+			String[] res = this.getAnnotationFieldsValue(annotationType, element, "consumes");
 			return res == null
 				? this.getParentOrFallback(element, res, this::getConsumedType)
 				: res;
@@ -190,11 +191,11 @@ public class RouteCompass extends AbstractProcessor {
 	 * Finds the media type consumed by an endpoint.
 	 * @param annotationType the {@link TypeElement} with the annotation we are processing
 	 * @param element the {@link Element} currently being examined
-	 * @return the {@link MediaType} consumed by the endpoint
+	 * @return the media type consumed by the endpoint
 	 */
-	private MediaType getProducedType(TypeElement annotationType, Element element) {
+	private String[] getProducedType(TypeElement annotationType, Element element) {
 		try {
-			MediaType res = this.getAnnotationFieldsValue(annotationType, element, "produces");
+			String[] res = this.getAnnotationFieldsValue(annotationType, element, "produces");
 			return res == null
 				? this.getParentOrFallback(element, res, this::getProducedType)
 				: res;

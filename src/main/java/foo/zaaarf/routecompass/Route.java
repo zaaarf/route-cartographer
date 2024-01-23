@@ -1,6 +1,5 @@
 package foo.zaaarf.routecompass;
 
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestMethod;
 
 /**
@@ -18,16 +17,16 @@ public class Route {
 	public final String method;
 
 	/**
-	 * The {@link MediaType} produced by the endpoint.
+	 * The media types produced by the endpoint.
 	 * May be null if not specified.
 	 */
-	public final String produces;
+	public final String[] produces;
 
 	/**
-	 * The {@link MediaType} consumed by the endpoint.
+	 * The media types consumed by the endpoint.
 	 * May be null if not specified.
 	 */
-	public final String consumes;
+	public final String[] consumes;
 
 	/**
 	 * Whether the endpoint is deprecated.
@@ -53,14 +52,14 @@ public class Route {
 	 * The one and only constructor.
 	 * @param path the path of the endpoint
 	 * @param methods the {@link RequestMethod}s accepted by the endpoint
-	 * @param consumes the {@link MediaType} consumed by the endpoint, may be null
-	 * @param produces the {@link MediaType} produced by the endpoint, may be null
+	 * @param consumes the media types consumed by the endpoint, may be null
+	 * @param produces the media types produced by the endpoint, may be null
 	 * @param deprecated whether the endpoint is deprecated
 	 * @param returnType the DTO for the response type, may be null
 	 * @param inputType the DTO for the request type, may be null
 	 * @param params {@link Param}s of the endpoint, may be null
 	 */
-	public Route(String path, RequestMethod[] methods, MediaType consumes, MediaType produces,
+	public Route(String path, RequestMethod[] methods, String[] consumes, String[] produces,
 	             boolean deprecated, DTO returnType, DTO inputType, Param... params) {
 		this.path = path;
 
@@ -74,11 +73,11 @@ public class Route {
 			.append("]");
 		this.method = methodStringBuilder.toString();
 
-		if(produces != null) this.produces = produces.toString();
-		else this.produces = null;
+		if(produces != null) this.produces = produces;
+		else this.produces = new String[0];
 
-		if(consumes != null) this.consumes = consumes.toString();
-		else this.consumes = null;
+		if(consumes != null) this.consumes = consumes;
+		else this.consumes = new String[0];
 
 		this.deprecated = deprecated;
 
