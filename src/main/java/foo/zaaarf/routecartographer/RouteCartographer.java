@@ -1,4 +1,4 @@
-package foo.zaaarf.routecompass;
+package foo.zaaarf.routecartographer;
 
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
  * The main processor class.
  */
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
-public class RouteCompass extends AbstractProcessor {
+public class RouteCartographer extends AbstractProcessor {
 
 	/**
 	 * The filename of the output.
@@ -47,7 +47,7 @@ public class RouteCompass extends AbstractProcessor {
 	/**
 	 * Default constructor, it only initialises {@link #annotationClasses}.
 	 */
-	public RouteCompass() {
+	public RouteCartographer() {
 		this.annotationClasses.add(RequestMapping.class);
 		this.annotationClasses.add(GetMapping.class);
 		this.annotationClasses.add(PostMapping.class);

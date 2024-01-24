@@ -1,4 +1,4 @@
-package foo.zaaarf.routecompass;
+package foo.zaaarf.routecartographer;
 
 import org.springframework.web.bind.annotation.RequestMethod;
 
