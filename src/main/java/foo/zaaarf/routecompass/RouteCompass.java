@@ -30,6 +30,11 @@ import java.util.stream.Collectors;
 public class RouteCompass extends AbstractProcessor {
 
 	/**
+	 * The filename of the output.
+	 */
+	private static final String ROUTE_MAP_FILENAME = "route_map";
+
+	/**
 	 * A {@link Map} tying each component class to the routes it contains.
 	 */
 	private final Map<String, List<Route>> foundRoutes = new HashMap<>();
@@ -38,7 +43,7 @@ public class RouteCompass extends AbstractProcessor {
 	 * A {@link Set} containing all the supported annotation classes.
 	 */
 	private final Set<Class<? extends Annotation>> annotationClasses = new HashSet<>();
-
+	
 	/**
 	 * Default constructor, it only initialises {@link #annotationClasses}.
 	 */
@@ -85,11 +90,23 @@ public class RouteCompass extends AbstractProcessor {
 		}
 
 		try {
-			FileObject serviceProvider = this.processingEnv.getFiler().createResource(
-				StandardLocation.SOURCE_OUTPUT, "", "route_map"
+			CharSequence startingContents;
+			try {
+				FileObject existingRouteMap = this.processingEnv.getFiler().getResource(
+					StandardLocation.SOURCE_OUTPUT, "", ROUTE_MAP_FILENAME
+				);
+				startingContents = existingRouteMap.getCharContent(true);
+				existingRouteMap.delete();
+			} catch (IOException ex) {
+				startingContents = "";
+			}
+
+			FileObject routeMap = this.processingEnv.getFiler().createResource(
+				StandardLocation.SOURCE_OUTPUT, "", ROUTE_MAP_FILENAME
 			);
 
-			PrintWriter out = new PrintWriter(serviceProvider.openWriter());
+			PrintWriter out = new PrintWriter(routeMap.openWriter());
+			out.println(startingContents); //print with an extra newline
 			for(String componentClass : this.foundRoutes.keySet()) {
 				out.println(componentClass + ":");
 
@@ -152,7 +169,10 @@ public class RouteCompass extends AbstractProcessor {
 				String parent = this.getFullRoute(a, e)[0];
 				for(int i = 0; i < routes.length; i++) {
 					StringBuilder sb = new StringBuilder(parent);
-					if(!parent.endsWith("/")) sb.append("/");
+					if(!parent.endsWith("/") && !routes[i].startsWith("/"))
+						sb.append("/");
+					if(parent.endsWith("/") && routes[i].startsWith("/"))
+						sb.deleteCharAt(sb.length() - 1);
 					sb.append(routes[i]);
 					routes[i] = sb.toString();
 				}
